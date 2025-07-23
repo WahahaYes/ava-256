@@ -38,6 +38,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--opts", default=[], type=str, nargs="+")
     args = parser.parse_args()
+    print(args)
 
     with open(args.config, "r") as file:
         config = CN(yaml.load(file, Loader=yaml.UnsafeLoader))
@@ -148,76 +149,81 @@ if __name__ == "__main__":
 
     it = 0
 
-    for driver in tqdm(driver_loader, desc="Rendering Frames"):
-        # Skip if any of the frames is empty
-        if driver is None:
-            continue
+    with torch.no_grad():
 
-        cudadriver: Dict[str, Union[torch.Tensor, int, str]] = tocuda(driver)
-        cudadriven: Dict[str, Union[torch.Tensor, int, str]] = tocuda(driven)
+        for driver in tqdm(driver_loader, desc="Rendering Frames"):
+            # Skip if any of the frames is empty
+            if driver is None:
+                continue
 
-        running_avg_scale = False
-        gt_geo = None
-        residuals_weight = 1.0
-        output_set = set(["irgbrec", "bg"])
+            cudadriver: Dict[str, Union[torch.Tensor, int, str]] = tocuda(driver)
+            cudadriven: Dict[str, Union[torch.Tensor, int, str]] = tocuda(driven)
 
-        # Generate image from original inputs
-        output_orig = ae(
-            camrot=cudadriver["camrot"],
-            campos=cudadriver["campos"],
-            focal=cudadriver["focal"],
-            princpt=cudadriver["princpt"],
-            modelmatrix=cudadriver["modelmatrix"],
-            avgtex=cudadriver["avgtex"],
-            verts=cudadriver["verts"],
-            neut_avgtex=cudadriver["neut_avgtex"],
-            neut_verts=cudadriver["neut_verts"],
-            target_neut_avgtex=cudadriver["neut_avgtex"],
-            target_neut_verts=cudadriver["neut_verts"],
-            pixelcoords=cudadriver["pixelcoords"],
-            idindex=cudadriver["idindex"],
-            camindex=cudadriver["camindex"],
-            running_avg_scale=running_avg_scale,
-            gt_geo=gt_geo,
-            residuals_weight=residuals_weight,
-            output_set=output_set,
-        )
+            running_avg_scale = False
+            gt_geo = None
+            residuals_weight = 1.0
+            output_set = set(["irgbrec", "bg"])
 
-        # Generate image from cross id texture and vertex
-        output_driven = ae(
-            camrot=cudadriver["camrot"],
-            campos=cudadriver["campos"],
-            focal=cudadriver["focal"],
-            princpt=cudadriver["princpt"],
-            modelmatrix=cudadriver["modelmatrix"],
-            avgtex=cudadriver["avgtex"],
-            verts=cudadriver["verts"],
-            # normalized using the train data stats and driven data stats
-            neut_avgtex=cudadriver["neut_avgtex"],
-            neut_verts=cudadriver["neut_verts"],
-            target_neut_avgtex=cudadriven["neut_avgtex"],
-            target_neut_verts=cudadriven["neut_verts"],
-            pixelcoords=cudadriver["pixelcoords"],
-            idindex=cudadriver["idindex"],
-            camindex=cudadriver["camindex"],
-            running_avg_scale=running_avg_scale,
-            gt_geo=gt_geo,
-            residuals_weight=residuals_weight,
-            output_set=output_set,
-        )
+            # Generate image from original inputs
+            output_orig = ae(
+                camrot=cudadriver["camrot"],
+                campos=cudadriver["campos"],
+                focal=cudadriver["focal"],
+                princpt=cudadriver["princpt"],
+                modelmatrix=cudadriver["modelmatrix"],
+                avgtex=cudadriver["avgtex"],
+                verts=cudadriver["verts"],
+                neut_avgtex=cudadriver["neut_avgtex"],
+                neut_verts=cudadriver["neut_verts"],
+                target_neut_avgtex=cudadriver["neut_avgtex"],
+                target_neut_verts=cudadriver["neut_verts"],
+                pixelcoords=cudadriver["pixelcoords"],
+                idindex=cudadriver["idindex"],
+                camindex=cudadriver["camindex"],
+                running_avg_scale=running_avg_scale,
+                gt_geo=gt_geo,
+                residuals_weight=residuals_weight,
+                output_set=output_set,
+            )
 
-        # Grab ground truth frame from the driver
-        gt = cudadriver["image"].detach().cpu().numpy()
-        gt = einops.rearrange(gt, "1 c h w -> h w c")
+            # Generate image from cross id texture and vertex
+            output_driven = ae(
+                camrot=cudadriver["camrot"],
+                campos=cudadriver["campos"],
+                focal=cudadriver["focal"],
+                princpt=cudadriver["princpt"],
+                modelmatrix=cudadriver["modelmatrix"],
+                avgtex=cudadriver["avgtex"],
+                verts=cudadriver["verts"],
+                # normalized using the train data stats and driven data stats
+                neut_avgtex=cudadriver["neut_avgtex"],
+                neut_verts=cudadriver["neut_verts"],
+                # target_neut_avgtex=cudadriven["neut_avgtex"],
+                # target_neut_verts=cudadriven["neut_verts"],
+                target_neut_avgtex=cudadriver["neut_avgtex"],
+                target_neut_verts=cudadriver["neut_verts"],
+                pixelcoords=cudadriver["pixelcoords"],
+                idindex=cudadriver["idindex"],
+                camindex=cudadriver["camindex"],
+                running_avg_scale=running_avg_scale,
+                gt_geo=gt_geo,
+                residuals_weight=residuals_weight,
+                output_set=output_set,
+                epsilon=1,
+            )
 
-        rgb_orig = output_orig["irgbrec"].detach().cpu().numpy()
-        rgb_orig = einops.rearrange(rgb_orig, "1 c h w -> h w c")
+            # Grab ground truth frame from the driver
+            gt = cudadriver["image"].detach().cpu().numpy()
+            gt = einops.rearrange(gt, "1 c h w -> h w c")
 
-        rgb_driven = output_driven["irgbrec"].detach().cpu().numpy()
-        rgb_driven = einops.rearrange(rgb_driven, "1 c h w -> h w c")
+            rgb_orig = output_orig["irgbrec"].detach().cpu().numpy()
+            rgb_orig = einops.rearrange(rgb_orig, "1 c h w -> h w c")
 
-        render_img([[gt, rgb_orig, rgb_driven]], f"{output_dir}/img_{it:06d}.png")
+            rgb_driven = output_driven["irgbrec"].detach().cpu().numpy()
+            rgb_driven = einops.rearrange(rgb_driven, "1 c h w -> h w c")
 
-        it += 1
+            render_img([[gt, rgb_orig, rgb_driven]], f"{output_dir}/img_{it:06d}.png")
+
+            it += 1
 
     print(f"Done! Saved {it} images to {output_dir}")

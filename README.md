@@ -1,3 +1,12 @@
+# Codec Avatar model implementation for "Towards Privacy-preserving Photorealistic Self-avatars in Mixed Reality"
+This is a fork of the official ava-256 codebase, where we adapted the architecture to be privacy-preserving by implementing the AvatarLDP and AvatarRotation privacy algorithms. See below for the original codebase's README and LICENSE.
+
+### Citation
+
+```
+# TODO: Wilson et al 2025
+```
+
 # Ava-256: Universal Encoders and Decoders
 
 ### Together with [Goliath](https://github.com/facebookresearch/goliath), part of Codec Avatar Studio
